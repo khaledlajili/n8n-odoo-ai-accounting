@@ -1,0 +1,37 @@
+# ---- Secrets / environment ----
+.env
+.env.*
+!.env.example
+
+# ---- Runtime data ----
+docker-data/
+*.log
+logs/
+
+# ---- Odoo local addons (keep folder, ignore contents) ----
+odoo-addons/*
+!odoo-addons/.gitkeep
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# ---- Node ----
+node_modules/
+npm-debug.log*
+
+# ---- IDE / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- Temp / backups ----
+tmp/
+*.tmp
+*.bak
+*.swp
