@@ -82,6 +82,16 @@ services:
     networks:
       - northstar-net
 
+  validator:
+    build:
+      context: ./helpers/validation
+    container_name: northstar-validator
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    networks:
+      - northstar-net
+
 volumes:
   postgres_data:
   odoo_data:
