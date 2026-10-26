@@ -25,6 +25,18 @@ def call(model, method, *args, **kwargs):
 company = call("res.company", "search_read", [], fields=["id", "name"], limit=1)[0]
 print(f"Company: {company['name']} (id={company['id']})")
 
+# Resolve EUR so POs are created in the fixture currency
+eur_hits = call("res.currency", "search_read", [["name", "=", "EUR"]], fields=["id","active"], limit=1)
+if not eur_hits:
+    raise SystemExit("EUR not found — enable it in Accounting settings first")
+eur_id = eur_hits[0]["id"]
+if not eur_hits[0]["active"]:
+    try:
+        call("res.currency", "write", [eur_id], {"active": True})
+        print(f"Activated EUR (id={eur_id})")
+    except Exception as e:
+        print(f"WARN: cannot activate EUR as integration user: {e}")
+
 # --- Suppliers ---
 suppliers = [
     ("Northstar Office Supplies", "DEMO-TAX-001"),
@@ -99,7 +111,9 @@ for po_name, supplier_name, lines in pos:
             "price_unit": next(p for n, c, p in products if n == prod_name),
         }))
     po_id = call("purchase.order", "create", {
+        "name": po_name,
         "partner_id": supplier_ids[supplier_name],
+        "currency_id": eur_id,
         "order_line": line_cmds,
     })
     print(f"Created PO: {po_name} (id={po_id})")

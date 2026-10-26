@@ -1,0 +1,69 @@
+{
+  "name": "WF04 test minimal",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "wf04-min", "responseMode": "lastNode", "options": {} },
+      "id": "n-webhook",
+      "name": "Agent Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "11111111-1111-4111-8111-111111111111"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body || $json;\nconst msg = String(b.message || '').trim();\nreturn [{ json: { message: msg || 'Find the supplier with VAT DEMO-TAX-001.' } }];"
+      },
+      "id": "n-prep",
+      "name": "Extract Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "agent": "toolsAgent",
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "You are a supplier lookup assistant. Call the lookup_supplier tool whenever the user asks about a supplier. Never invent IDs. Return the tool result verbatim if it succeeds."
+        }
+      },
+      "id": "n-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [440, 0]
+    },
+    {
+      "parameters": { "model": "__GROQ_MODEL__", "options": {} },
+      "id": "n-groq",
+      "name": "Groq Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [440, 220],
+      "credentials": { "groqApi": { "id": "groq-cred", "name": "Groq account" } }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Look up the supplier with VAT DEMO-TAX-001. Returns id, name, vat. Read-only.",
+        "jsCode": "const resp = await fetch('http://validator:8000/odoo/search_read', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    model: 'res.partner',\n    domain: [['vat', '=', 'DEMO-TAX-001'], ['supplier_rank', '>', 0]],\n    fields: ['id', 'name', 'vat'],\n    limit: 5\n  })\n});\nreturn await resp.json();"
+      },
+      "id": "n-tool-supplier",
+      "name": "lookup_supplier",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [660, -80]
+    }
+  ],
+  "connections": {
+    "Agent Webhook":   { "main": [[{ "node": "Extract Message", "type": "main", "index": 0 }]] },
+    "Extract Message": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
+    "Groq Chat Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "lookup_supplier": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": false }
+}

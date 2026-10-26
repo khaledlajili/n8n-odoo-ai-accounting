@@ -1,0 +1,399 @@
+{
+  "id": "wf02-supplier-po-matching",
+  "name": "WF02 - Supplier and PO matching",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf02-match",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "n-webhook",
+      "name": "Match Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "4e1fb78a-003d-40f6-8b34-4bd613a386cf"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body || $json;\nconst inv = b.invoice || b;\nconst rid = b.request_id || inv.request_id || (inv.invoice_number ? 'REQ-' + inv.invoice_number : 'REQ-' + Date.now());\nreturn [{ json: {\n  invoice: inv, request_id: rid,\n  taxId: String(inv.supplier_tax_id || ''),\n  name: String(inv.supplier_name || ''),\n  po: String(inv.purchase_order_number || '')\n} }];"
+      },
+      "id": "n-prep",
+      "name": "Prepare Search Terms",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/odoo/search_read",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"res.partner\",\n  \"domain\": [[\"vat\", \"=\", \"{{ $json.taxId }}\"], [\"supplier_rank\", \">\", 0]],\n  \"fields\": [\"id\",\"name\",\"vat\"],\n  \"limit\": 5\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "n-supplier-vat",
+      "name": "Find Supplier by VAT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/odoo/search_read",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"res.partner\",\n  \"domain\": [[\"name\", \"ilike\", \"{{ $('Prepare Search Terms').item.json.name }}\"], [\"supplier_rank\", \">\", 0]],\n  \"fields\": [\"id\",\"name\",\"vat\"],\n  \"limit\": 10\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "n-supplier-name",
+      "name": "Find Supplier by Name",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/odoo/search_read",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"purchase.order\",\n  \"domain\": [[\"name\", \"=\", \"{{ $('Prepare Search Terms').item.json.po }}\"]],\n  \"fields\": [\"id\",\"name\",\"partner_id\",\"amount_total\",\"currency_id\",\"state\"],\n  \"limit\": 5\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "n-po",
+      "name": "Find Purchase Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const getResult = (nodeName) => {\n  try {\n    return ($(nodeName).all() || []).flatMap(i => i.json?.result || []);\n  } catch (e) { return []; }\n};\nconst vat    = getResult('Find Supplier by VAT');\nconst byName = getResult('Find Supplier by Name');\nconst po     = getResult('Find Purchase Order');\nconst seen = new Set();\nconst suppliers = [];\nfor (const s of [...vat, ...byName]) {\n  if (s && s.id != null && !seen.has(s.id)) { seen.add(s.id); suppliers.push(s); }\n}\nconst invoice = $('Prepare Search Terms').first().json.invoice;\nreturn [{ json: { invoice, supplier_candidates: suppliers, po_candidates: po } }];"
+      },
+      "id": "n-merge",
+      "name": "Merge Lookup Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/match",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "n-match",
+      "name": "Deterministic Match",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "MATCHED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "MATCHED"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c2",
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "NEEDS_REVIEW",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "NEEDS_REVIEW"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c3",
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "REJECTED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "REJECTED"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "n-switch",
+      "name": "Route by Match Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1320,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/review/prepare",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"request_id\": \"{{ $('Prepare Search Terms').item.json.request_id }}\",\n  \"invoice\": {{ JSON.stringify($('Prepare Search Terms').item.json.invoice) }},\n  \"match_result\": {{ JSON.stringify($json) }}\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "n-noop-matched",
+      "name": "Ready for Approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        -200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n-noop-review",
+      "name": "Queue for Review",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -40
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n-noop-reject",
+      "name": "Reject and Log",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        120
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n-noop-unknown",
+      "name": "Unknown Status",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        280
+      ]
+    }
+  ],
+  "connections": {
+    "Match Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Search Terms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Search Terms": {
+      "main": [
+        [
+          {
+            "node": "Find Supplier by VAT",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Find Supplier by Name",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Find Purchase Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Supplier by VAT": {
+      "main": [
+        [
+          {
+            "node": "Merge Lookup Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Supplier by Name": {
+      "main": [
+        [
+          {
+            "node": "Merge Lookup Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Purchase Order": {
+      "main": [
+        [
+          {
+            "node": "Merge Lookup Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Lookup Results": {
+      "main": [
+        [
+          {
+            "node": "Deterministic Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deterministic Match": {
+      "main": [
+        [
+          {
+            "node": "Route by Match Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Match Status": {
+      "main": [
+        [
+          {
+            "node": "Ready for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Queue for Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject and Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

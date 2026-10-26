@@ -70,3 +70,25 @@ def read(payload):
     uid = _authenticate()
     return {"result": _models().execute_kw(
         ODOO_DB, uid, ODOO_API_KEY, model, "read", [ids], {"fields": fields})}
+
+def po_with_lines(payload):
+    """payload = {name}  -> {result: {po: {...}|null, lines: [...]}}"""
+    name = payload["name"]
+    uid = _authenticate()
+    models = _models()
+    po_ids = models.execute_kw(
+        ODOO_DB, uid, ODOO_API_KEY, "purchase.order",
+        "search", [[["name", "=", name]]], {"limit": 1})
+    if not po_ids:
+        return {"result": {"po": None, "lines": []}}
+    po_data = models.execute_kw(
+        ODOO_DB, uid, ODOO_API_KEY, "purchase.order",
+        "read", [po_ids],
+        {"fields": ["id", "name", "partner_id", "amount_total",
+                    "currency_id", "state"]})
+    lines = models.execute_kw(
+        ODOO_DB, uid, ODOO_API_KEY, "purchase.order.line",
+        "search_read", [[["order_id", "=", po_ids[0]]]],
+        {"fields": ["id", "product_id", "product_qty", "price_unit",
+                    "price_subtotal", "taxes_id"]})
+    return {"result": {"po": po_data[0] if po_data else None, "lines": lines}}

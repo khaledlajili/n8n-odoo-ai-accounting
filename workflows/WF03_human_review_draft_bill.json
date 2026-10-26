@@ -119,7 +119,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $json;\nconst base = ($env.N8N_EDITOR_BASE_URL || 'http://localhost:5678');\nreturn [{ json: {\n  ...r,\n  approve_example: `curl -X POST ${base}/webhook/wf03 -H 'Content-Type: application/json' -d '{\"action\":\"decide\",\"review_id\":\"${r.review_id}\",\"decision\":\"approve\",\"reviewer\":\"demo\",\"reason\":\"looks good\"}'`,\n  reject_example:  `curl -X POST ${base}/webhook/wf03 -H 'Content-Type: application/json' -d '{\"action\":\"decide\",\"review_id\":\"${r.review_id}\",\"decision\":\"reject\",\"reviewer\":\"demo\",\"reason\":\"total mismatch\"}'`\n} }];"
+        "jsCode": "const r = $json;\nconst base = 'http://localhost:5678';\nreturn [{ json: {\n  ...r,\n  approve_example: `curl -X POST ${base}/webhook/wf03 -H 'Content-Type: application/json' -d '{\"action\":\"decide\",\"review_id\":\"${r.review_id}\",\"decision\":\"approve\",\"reviewer\":\"demo\",\"reason\":\"looks good\"}'`,\n  reject_example:  `curl -X POST ${base}/webhook/wf03 -H 'Content-Type: application/json' -d '{\"action\":\"decide\",\"review_id\":\"${r.review_id}\",\"decision\":\"reject\",\"reviewer\":\"demo\",\"reason\":\"total mismatch\"}'`\n} }];"
       },
       "id": "n-prepare-out",
       "name": "Format Prepare Response",

@@ -2,13 +2,23 @@
 .env
 .env.*
 !.env.example
+.odoo_api_key
+*.pem
+*.key
+
+# ---- Backups (contain .env snapshots, DB dumps, credential exports) ----
+backups/
+backup/
+*.dump
+*.sql.gz
+*.tgz
 
 # ---- Runtime data ----
 docker-data/
 *.log
 logs/
 
-# ---- Odoo local addons (keep folder, ignore contents) ----
+# ---- Odoo local addons ----
 odoo-addons/*
 !odoo-addons/.gitkeep
 
@@ -30,7 +40,7 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
-# ---- Temp / backups ----
+# ---- Temp ----
 tmp/
 *.tmp
 *.bak
