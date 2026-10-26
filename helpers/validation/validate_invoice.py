@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
 Deterministic invoice validation.
-Reads a JSON document from stdin, writes a JSON result to stdout.
-Never trusts the model's arithmetic.
+
+Status semantics:
+  REJECTED        - payload cannot be parsed at all (JSON/Pydantic structural failure)
+  NEEDS_REVIEW    - parses, but missing fields / mismatches / warnings require a human
+  READY_FOR_MATCH - parses, no errors, no warnings
 """
 import json
 import sys
@@ -14,11 +17,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 TOLERANCE = Decimal("0.02")
 ALLOWED_CURRENCIES = {"EUR", "USD", "GBP"}
-
-def D(v) -> Decimal:
-    if v is None or v == "":
-        return Decimal("0")
-    return Decimal(str(v))
 
 def q2(v: Decimal) -> Decimal:
     return v.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -35,78 +33,92 @@ class Line(BaseModel):
         expected = q2(self.quantity * self.unit_price)
         if self.line_total is not None and abs(q2(self.line_total) - expected) > TOLERANCE:
             raise ValueError(f"line_total {self.line_total} != qty*unit {expected}")
-        self.line_total = expected
+        self.line_total = expected   # always set from code, never trust the model
         return self
 
 class Invoice(BaseModel):
-    supplier_name: str = Field(min_length=1)
+    supplier_name: Optional[str] = None
     supplier_tax_id: Optional[str] = None
-    invoice_number: str = Field(min_length=1)
-    invoice_date: str
+    invoice_number: Optional[str] = None
+    invoice_date: Optional[str] = None
     due_date: Optional[str] = None
-    currency: str
+    currency: Optional[str] = None
     purchase_order_number: Optional[str] = None
-    lines: List[Line] = Field(min_length=1)
+    lines: List[Line] = Field(default_factory=list)
     subtotal: Optional[Decimal] = None
     tax_total: Optional[Decimal] = None
-    grand_total: Decimal
+    grand_total: Optional[Decimal] = None
 
     @field_validator("currency")
     @classmethod
-    def check_currency(cls, v: str) -> str:
-        v = v.strip().upper()
-        if v not in ALLOWED_CURRENCIES:
-            raise ValueError(f"unsupported currency {v!r}")
-        return v
-
-    @field_validator("invoice_date", "due_date")
-    @classmethod
-    def check_date(cls, v: Optional[str]) -> Optional[str]:
-        if v in (None, ""):
+    def normalize_currency(cls, v):
+        if v is None or v == "":
             return None
-        datetime.strptime(v, "%Y-%m-%d")
-        return v
-
-    @model_validator(mode="after")
-    def recalculate(self):
-        subtotal = q2(sum((l.line_total for l in self.lines), Decimal("0")))
-        tax = q2(sum((l.line_total * l.tax_rate / Decimal("100") for l in self.lines), Decimal("0")))
-        grand = q2(subtotal + tax)
-        self.subtotal = subtotal
-        self.tax_total = tax
-        self._grand_total_expected = grand
-        return self
+        return v.strip().upper()
 
 def main():
-    payload = json.load(sys.stdin)
-    errors, warnings = [], []
+    try:
+        payload = json.load(sys.stdin)
+    except Exception as exc:
+        print(json.dumps({"status": "REJECTED", "errors": [f"invalid JSON: {exc}"]}))
+        return
+
     try:
         inv = Invoice(**payload)
     except Exception as exc:
+        # Structural failure inside a line item, bad Decimal, etc.
         print(json.dumps({"status": "REJECTED", "errors": [str(exc)]}))
         return
 
-    expected_grand = inv._grand_total_expected
-    stated_grand = q2(inv.grand_total)
+    errors, warnings = [], []
 
-    if abs(expected_grand - stated_grand) > TOLERANCE:
-        errors.append(f"grand_total mismatch: stated {stated_grand}, calculated {expected_grand}")
-    if not inv.purchase_order_number:
-        warnings.append("missing purchase_order_number")
-    if not inv.supplier_tax_id:
-        warnings.append("missing supplier_tax_id")
+    # --- Required top-level fields ---
+    if not inv.supplier_name:    errors.append("missing supplier_name")
+    if not inv.invoice_number:   errors.append("missing invoice_number")
+    if not inv.invoice_date:     errors.append("missing invoice_date")
+    if not inv.currency:         errors.append("missing currency")
+    if inv.grand_total is None:  errors.append("missing grand_total")
+    if not inv.lines:            errors.append("no line items")
 
-    status = "NEEDS_REVIEW" if (errors or warnings) else "READY_FOR_MATCH"
+    # --- Currency allow-list ---
+    if inv.currency and inv.currency not in ALLOWED_CURRENCIES:
+        errors.append(f"unsupported currency {inv.currency!r}")
+
+    # --- Date format ---
+    for fld in ("invoice_date", "due_date"):
+        val = getattr(inv, fld)
+        if val:
+            try:
+                datetime.strptime(val, "%Y-%m-%d")
+            except Exception:
+                errors.append(f"invalid {fld} format: {val!r}")
+
+    # --- Arithmetic (only if we have the ingredients) ---
+    calculated = None
+    if inv.lines and inv.grand_total is not None:
+        subtotal = q2(sum((l.line_total for l in inv.lines), Decimal("0")))
+        tax      = q2(sum((l.line_total * l.tax_rate / Decimal("100") for l in inv.lines), Decimal("0")))
+        grand    = q2(subtotal + tax)
+        if abs(grand - q2(inv.grand_total)) > TOLERANCE:
+            errors.append(f"grand_total mismatch: stated {q2(inv.grand_total)}, calculated {grand}")
+        calculated = {
+            "subtotal":   str(subtotal),
+            "tax_total":  str(tax),
+            "grand_total": str(grand),
+        }
+
+    # --- Soft warnings (data quality) ---
+    if not inv.purchase_order_number: warnings.append("missing purchase_order_number")
+    if not inv.supplier_tax_id:       warnings.append("missing supplier_tax_id")
+
+    status = "READY_FOR_MATCH" if (not errors and not warnings) else "NEEDS_REVIEW"
+
     print(json.dumps({
-        "status": status,
+        "status":     status,
         "normalized": inv.model_dump(mode="json"),
-        "calculated": {
-            "subtotal": str(inv.subtotal),
-            "tax_total": str(inv.tax_total),
-            "grand_total": str(expected_grand),
-        },
-        "errors": errors,
-        "warnings": warnings,
+        "calculated": calculated,
+        "errors":     errors,
+        "warnings":   warnings,
     }, default=str))
 
 if __name__ == "__main__":
