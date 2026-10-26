@@ -37,3 +37,27 @@ no editor UI used. Validator is the only source of `calculated`.
 Note: POs were originally created under the company default currency (TND).
 Relabeled to EUR via write() without altering line totals; verified amounts
 unchanged after relabel. EUR currency id = 126.
+
+## Phase 5 — WF03 human review and draft vendor bill (final)
+
+| Test | Expected | Actual |
+|---|---|---|
+| Prepare review for INV-1042 | `review_id` returned, `status: pending` | PASS — `RV-99049e3a03ee`, pending |
+| Duplicate prepare with same `request_id` | same `review_id` returned | PASS — `SMOKE-002` returned `RV-c5b9f96312a7` twice |
+| Approve INV-1042 | `status: approved`, `odoo_bill_id` set | PASS — bill id=1, `BILL/2026/10/0001` |
+| Re-approve INV-1042 | same `odoo_bill_id`, no second bill | PASS — `already_decided: true`, one bill total |
+| Odoo `state` of created bill | `draft`, `move_type=in_invoice`, `ref=INV-1042` | PASS — all correct, `currency_id=EUR`, `amount_total=59.5` |
+| Reject INV-1043 | `status: rejected` | PASS — `RV-63b4fe629b6d`, rejected with reason |
+| No bill created for rejected INV-1043 | `search_read` returns `[]` | PASS — `result: []` |
+| No bill posted or paid | `state` never leaves `draft` | PASS — `state: draft` |
+
+### Known cosmetic limitation
+Re-approving an already-decided review returns `{already_decided: true, review: {...}}`
+rather than the flat approved-row shape. The bill is **not** duplicated — the
+idempotency guard short-circuits before any Odoo write. Consumers should read
+`review.odoo_bill_id` in that branch.
+
+### Root cause fixed this phase
+`reviews._row_to_dict` now ISO-formats `created_at` / `decided_at` so FastAPI's
+`JSONResponse` can serialize DB rows. Without this, `/review/prepare` returned
+`Object of type datetime is not JSON serializable`.

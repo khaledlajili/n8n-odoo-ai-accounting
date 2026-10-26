@@ -68,6 +68,7 @@ services:
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       N8N_SECURE_COOKIE: "false"
       N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
       N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
@@ -87,6 +88,12 @@ services:
       context: ./helpers/validation
     container_name: northstar-validator
     restart: unless-stopped
+    environment:
+      ODOO_INTERNAL_URL: http://odoo:8069
+      ODOO_DB: ${ODOO_DB_NAME}
+      ODOO_USER: n8n@northstar.local
+      ODOO_API_KEY: ${ODOO_API_KEY}
+      DATABASE_URL: postgresql://${N8N_DB_USER}:${N8N_DB_PASSWORD}@postgres:5432/${N8N_DB_NAME}
     ports:
       - "8001:8000"
     networks:

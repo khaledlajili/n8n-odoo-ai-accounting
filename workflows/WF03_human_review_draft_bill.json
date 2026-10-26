@@ -1,0 +1,627 @@
+{
+  "id": "wf03-human-review-draft-bill",
+  "name": "WF03 - Human review and draft vendor bill",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf03",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "n-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "312d7cb7-54b7-4c78-ab71-edce3d083f3e"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body || $json;\nconst action = String(b.action || '').toLowerCase();\nif (!['prepare','decide'].includes(action)) {\n  return [{ json: { error: \"invalid action; expected 'prepare' or 'decide'\", action } }];\n}\nreturn [{ json: { action, payload: b } }];"
+      },
+      "id": "n-route",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "prepare",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "prepare"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c2",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "decide",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "decide"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "n-branch",
+      "name": "Branch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/review/prepare",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ request_id: $json.payload.request_id, invoice: $json.payload.invoice, match_result: $json.payload.match_result }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "n-prepare",
+      "name": "Prepare Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json;\nconst base = ($env.N8N_EDITOR_BASE_URL || 'http://localhost:5678');\nreturn [{ json: {\n  ...r,\n  approve_example: `curl -X POST ${base}/webhook/wf03 -H 'Content-Type: application/json' -d '{\"action\":\"decide\",\"review_id\":\"${r.review_id}\",\"decision\":\"approve\",\"reviewer\":\"demo\",\"reason\":\"looks good\"}'`,\n  reject_example:  `curl -X POST ${base}/webhook/wf03 -H 'Content-Type: application/json' -d '{\"action\":\"decide\",\"review_id\":\"${r.review_id}\",\"decision\":\"reject\",\"reviewer\":\"demo\",\"reason\":\"total mismatch\"}'`\n} }];"
+      },
+      "id": "n-prepare-out",
+      "name": "Format Prepare Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/review/get",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ review_id: $json.payload.review_id }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "n-load",
+      "name": "Load Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const review = $json;\nif (review.error || !review.review_id) {\n  return [{ json: { error: 'review not found', detail: review } }];\n}\nif (review.status !== 'pending') {\n  return [{ json: { already_decided: true, review } }];\n}\nconst decision = String($('Route Action').item.json.payload.decision || '').toLowerCase();\nif (!['approve','reject'].includes(decision)) {\n  return [{ json: { error: \"decision must be 'approve' or 'reject'\" } }];\n}\nreturn [{ json: { review, decision, reviewer: $('Route Action').item.json.payload.reviewer || 'unknown', reason: $('Route Action').item.json.payload.reason || '' } }];"
+      },
+      "id": "n-gate",
+      "name": "Gate Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "approve",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "approve"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c2",
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "reject",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "reject"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "n-decision",
+      "name": "Branch Decision",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1100,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Guard: only create if the review is still pending AND has no odoo_bill_id yet.\nconst r = $json.review;\nif (!r || !r.review_id) throw new Error('missing review');\nif (r.odoo_bill_id) {\n  return [{ json: { already_billed: true, review: r, odoo_bill: { id: r.odoo_bill_id, name: r.odoo_bill_name } } }];\n}\nreturn [{ json: { review: r } }];"
+      },
+      "id": "n-guard",
+      "name": "Guard Idempotency",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/odoo/search_read",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"account.tax\",\n  \"domain\": [[\"type_tax_use\",\"=\",\"purchase\"],[\"amount\",\"=\", 19.0],[\"active\",\"=\",true]],\n  \"fields\": [\"id\",\"name\",\"amount\"],\n  \"limit\": 1\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "n-tax",
+      "name": "Lookup 19% Purchase Tax",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compose the account.move payload.\nconst guard = $('Guard Idempotency').item.json;\nif (guard.already_billed) {\n  return [{ json: { skip: true, odoo_bill: guard.odoo_bill } }];\n}\nconst r = guard.review;\nconst inv = r.invoice || {};\nconst match = r.match_result || {};\nconst supplier_id = match?.match?.supplier_id;\nif (!supplier_id) throw new Error('missing supplier_id in review.match_result');\n\n// Currency: EUR (id resolved earlier). We pass by ISO code search once at runtime.\nconst tax_hits = ($('Lookup 19% Purchase Tax').all() || []).flatMap(i => i.json?.result || []);\nconst tax_id = tax_hits.length ? tax_hits[0].id : null;\nconst line_cmds = (inv.lines || []).map(l => {\n  const base = { name: l.description, quantity: Number(l.quantity), price_unit: Number(l.unit_price) };\n  if (tax_id) base.tax_ids = [[6, 0, [tax_id]]];\n  return [0, 0, base];\n});\nreturn [{ json: {\n  skip: false,\n  move_type: 'in_invoice',\n  supplier_id,\n  currency_code: inv.currency || 'EUR',\n  invoice_number: inv.invoice_number,\n  invoice_date: inv.invoice_date,\n  due_date: inv.due_date,\n  line_cmds,\n  review_id: r.review_id,\n  request_id: r.request_id,\n  tax_id\n} }];"
+      },
+      "id": "n-compose",
+      "name": "Compose Bill Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/odoo/search_read",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"res.currency\",\n  \"domain\": [[\"name\",\"=\",\"{{ $json.currency_code }}\"]],\n  \"fields\": [\"id\",\"name\"],\n  \"limit\": 1\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "n-cur",
+      "name": "Lookup Currency",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build final account.move.create payload.\nconst compose = $('Compose Bill Payload').item.json;\nif (compose.skip) return [{ json: { skip: true, odoo_bill: compose.odoo_bill } }];\nconst cur = ($json.result || [])[0];\nif (!cur || !cur.id) throw new Error('currency not found: ' + compose.currency_code);\nconst values = {\n  move_type: 'in_invoice',\n  partner_id: compose.supplier_id,\n  currency_id: cur.id,\n  invoice_date: compose.invoice_date,\n  ref: compose.invoice_number,\n  invoice_line_ids: compose.line_cmds\n};\nif (compose.due_date) values.invoice_date_due = compose.due_date;\nreturn [{ json: {\n  values,\n  review_id: compose.review_id,\n  request_id: compose.request_id,\n  tax_id: compose.tax_id\n} }];"
+      },
+      "id": "n-values",
+      "name": "Finalize Bill Values",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/odoo/create",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'account.move', values: $json.values }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "n-create",
+      "name": "Create Draft Bill",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/odoo/read",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'account.move', ids: [$json.result], fields: ['id','name','state','move_type','amount_total','currency_id'] }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "n-readback",
+      "name": "Read Back Bill",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/review/decide",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"review_id\": \"{{ $('Finalize Bill Values').item.json.review_id }}\",\n  \"decision\": \"approve\",\n  \"reviewer\": \"{{ $('Gate Decision').item.json.reviewer }}\",\n  \"reason\": \"{{ $('Gate Decision').item.json.reason }}\",\n  \"odoo_bill\": {{ JSON.stringify(($json.result || [])[0] || {}) }}\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "n-approve",
+      "name": "Record Approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/review/decide",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"review_id\": \"{{ $json.review.review_id }}\",\n  \"decision\": \"reject\",\n  \"reviewer\": \"{{ $json.reviewer }}\",\n  \"reason\": \"{{ $json.reason }}\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "n-reject",
+      "name": "Record Rejection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        160
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n-done",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3080,
+        -60
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n-err",
+      "name": "Error",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3080,
+        160
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Route Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Action": {
+      "main": [
+        [
+          {
+            "node": "Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Branch": {
+      "main": [
+        [
+          {
+            "node": "Prepare Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Review": {
+      "main": [
+        [
+          {
+            "node": "Format Prepare Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Review": {
+      "main": [
+        [
+          {
+            "node": "Gate Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate Decision": {
+      "main": [
+        [
+          {
+            "node": "Branch Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Branch Decision": {
+      "main": [
+        [
+          {
+            "node": "Guard Idempotency",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard Idempotency": {
+      "main": [
+        [
+          {
+            "node": "Lookup 19% Purchase Tax",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup 19% Purchase Tax": {
+      "main": [
+        [
+          {
+            "node": "Compose Bill Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Bill Payload": {
+      "main": [
+        [
+          {
+            "node": "Lookup Currency",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Currency": {
+      "main": [
+        [
+          {
+            "node": "Finalize Bill Values",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Bill Values": {
+      "main": [
+        [
+          {
+            "node": "Create Draft Bill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Draft Bill": {
+      "main": [
+        [
+          {
+            "node": "Read Back Bill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Back Bill": {
+      "main": [
+        [
+          {
+            "node": "Record Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Approval": {
+      "main": [
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Rejection": {
+      "main": [
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
