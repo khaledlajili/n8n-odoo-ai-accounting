@@ -23,3 +23,17 @@
 
 Method: `n8n import:workflow` + `n8n update:workflow --active` + restart;
 no editor UI used. Validator is the only source of `calculated`.
+
+## Phase 4 — WF02 final results (EUR relabel via write)
+
+| # | Test | Expected | Actual |
+|---|---|---|---|
+| 1 | Clean: supplier 7 + PO-204 + EUR + total 113.05 | MATCHED | _todo_ |
+| 2 | Unknown supplier DEMO-TAX-999 | NEEDS_REVIEW, "no supplier found" | _todo_ |
+| 3 | Missing PO PO-999 | NEEDS_REVIEW, "purchase order not found" | _todo_ |
+| 4 | PO-205 belongs to partner 8, not supplier 7 | NEEDS_REVIEW, partner-id mismatch | _todo_ |
+| 5 | Supplier auto-creation | Never happens | _todo_ |
+
+Note: POs were originally created under the company default currency (TND).
+Relabeled to EUR via write() without altering line totals; verified amounts
+unchanged after relabel. EUR currency id = 126.
