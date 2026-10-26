@@ -52,7 +52,7 @@ services:
       - northstar-net
 
   n8n:
-    image: n8nio/n8n:1.70.3
+    image: n8nio/n8n:2.42.4
     container_name: northstar-n8n
     restart: unless-stopped
     depends_on:
@@ -69,6 +69,8 @@ services:
       N8N_SECURE_COOKIE: "false"
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      N8N_ENABLED_MODULES: agents
+      N8N_EXPRESSION_ENGINE: vm
       N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres

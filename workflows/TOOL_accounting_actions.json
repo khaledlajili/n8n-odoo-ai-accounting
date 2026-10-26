@@ -1,0 +1,344 @@
+{
+  "id": "144e05e6-875b-4f90-ade7-90a1327c8c3d",
+  "name": "TOOL - Accounting Assistant Actions",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "action",
+              "type": "string"
+            },
+            {
+              "name": "query",
+              "type": "string"
+            },
+            {
+              "name": "po_name",
+              "type": "string"
+            },
+            {
+              "name": "lookup",
+              "type": "string"
+            },
+            {
+              "name": "request_id",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "trigger",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "lookup_supplier",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "lookup_supplier"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "c2",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "lookup_purchase_order",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "lookup_purchase_order"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "c3",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "invoice_status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "invoice_status"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "c4",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "bill_status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "bill_status"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "c5",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "prepare_draft",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "prepare_draft"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "c6",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "escalate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "outputKey": "escalate"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "switch",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/tool/lookup_supplier",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.query }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "h1",
+      "name": "HTTP Supplier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/tool/lookup_purchase_order",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ po_name: $json.po_name }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "h2",
+      "name": "HTTP PO",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/tool/invoice_status",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.query }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "h3",
+      "name": "HTTP Invoice Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/tool/bill_status",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ lookup: $json.lookup }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "h4",
+      "name": "HTTP Bill Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/tool/prepare_draft",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ request_id: $json.request_id }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "h5",
+      "name": "HTTP Prepare Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://validator:8000/tool/escalate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ request_id: $json.request_id }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "h6",
+      "name": "HTTP Escalate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Route Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Action": {
+      "main": [
+        [
+          {
+            "node": "HTTP Supplier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP PO",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Invoice Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Bill Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Prepare Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Escalate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
